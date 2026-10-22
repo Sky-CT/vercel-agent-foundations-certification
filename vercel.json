@@ -7,6 +7,10 @@
     "app/api/chat/[id]/stream/route.ts": {
       "maxDuration": 60,
       "supportsCancellation": true
+    },
+    "app/api/admin/chat/route.ts": {
+      "maxDuration": 60,
+      "supportsCancellation": true
     }
   }
 }

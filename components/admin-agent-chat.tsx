@@ -1,21 +1,18 @@
 "use client";
 
-/**
- * Welcome! This is the chat panel you will edit for the workshop!
- *
- * During the workshop you'll connect it to a real agent: swap the
- * local `useState` for `useChat` from the AI SDK, point the form
- * at `sendMessage`, and render each message's `parts` inside
- * `<ConversationContent>`.
- *
- * Workshop docs: https://agent-foundations-certification.vercel.app/docs/admin-chat-agent
- */
+import { useChat } from "@ai-sdk/react";
+import { WorkflowChatTransport } from "@ai-sdk/workflow/client";
 import { useState } from "react";
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "@/components/ai-elements/message";
 import {
   PromptInput,
   PromptInputBody,
@@ -36,19 +33,107 @@ const SUGGESTIONS = [
 export function AdminAgentChat() {
   const [input, setInput] = useState("");
 
-  const handleSubmit = (message: PromptInputMessage) => {};
+  const { messages, error, sendMessage } = useChat({
+    transport: new WorkflowChatTransport({ api: "/api/admin/chat" }),
+  });
+
+  const handleSubmit = (message: PromptInputMessage) => {
+    sendMessage({ text: input });
+    setInput("");
+  };
+
+  const handleSuggestionClick = (suggestion: string) => {
+    sendMessage({ text: suggestion });
+  };
+
+  if (error) return <div>{error.message}</div>;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <Conversation className="flex-1">
-        <ConversationContent>{null}</ConversationContent>
+        <ConversationContent>
+          {messages.map((m) =>
+            m.parts.map((p, i) => {
+              switch (p.type) {
+                case "text":
+                  return (
+                    <Message key={`${m.id}-${i}`} from={m.role}>
+                      <MessageContent>
+                        <MessageResponse>{p.text}</MessageResponse>
+                      </MessageContent>
+                    </Message>
+                  );
+                case "tool-bash": {
+                  const command =
+                    p.input && "command" in p.input ? p.input.command : undefined;
+                  const output =
+                    p.state === "output-available" ? p.output : undefined;
+                  return (
+                    <div
+                      key={`${m.id}-${i}`}
+                      className="my-2 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 font-mono text-sm"
+                    >
+                      <div className="flex items-center gap-2 border-b border-neutral-800 bg-neutral-800/50 px-3 py-2 text-neutral-400">
+                        <svg
+                          className="size-4"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth={2}
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="m6.75 7.5 3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0 0 21 18V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v12a2.25 2.25 0 0 0 2.25 2.25Z"
+                          />
+                        </svg>
+                        <span className="text-xs">
+                          {p.state === "output-available"
+                            ? "Terminal"
+                            : "Running…"}
+                        </span>
+                      </div>
+                      <div className="px-3 py-2">
+                        <div className="font-semibold text-neutral-100">
+                          $ {command}
+                        </div>
+                        {p.state === "output-available" && output ? (
+                          <div className="mt-1 text-neutral-300">
+                            {output.stdout ? (
+                              <pre className="whitespace-pre-wrap">
+                                {output.stdout}
+                              </pre>
+                            ) : null}
+                            {output.stderr ? (
+                              <pre className="whitespace-pre-wrap text-red-400">
+                                {output.stderr}
+                              </pre>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {p.state !== "output-available" ? (
+                          <div className="mt-1 flex items-center gap-1 text-neutral-500">
+                            <span className="animate-pulse">▊</span>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                }
+                default:
+                  return null;
+              }
+            }),
+          )}
+        </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
 
       <div className="flex flex-col gap-3 border-t p-3">
         <Suggestions>
           {SUGGESTIONS.map((s) => (
-            <Suggestion key={s} suggestion={s} />
+            <Suggestion key={s} suggestion={s} onClick={handleSuggestionClick} />
           ))}
         </Suggestions>
         <PromptInput onSubmit={handleSubmit}>

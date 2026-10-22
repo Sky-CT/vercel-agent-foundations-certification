@@ -2,16 +2,14 @@ import { tool } from "ai";
 import { z } from "zod";
 import {
   ApiRequestError,
-  createReturn,
   getCategories,
-  getOrder,
   getProductById,
   getProductStock,
   getProducts,
-  notifyReturnInProcess,
-  preauthorizeRefund,
 } from "@/lib/api";
 import { formatPrice } from "@/lib/format";
+import { start } from "workflow/api";
+import { returnFlow } from "./workflows/return-flow";
 
 function errorMessage(err: unknown): string {
   return err instanceof ApiRequestError ? err.message : "Unknown error";
@@ -34,6 +32,7 @@ export const searchProducts = tool({
       ),
   }),
   execute: async ({ query, category }) => {
+    "use step";
     try {
       const products = await getProducts({
         search: query,
@@ -63,6 +62,7 @@ export const getAllCategories = tool({
   description: `List every product category available in the Vercel swag store, along with the number of products in each. Use this when the user asks what categories exist, what kinds of products are sold, or wants to browse the store at a high level. Also call this before searchProducts when you need a valid category slug.`,
   inputSchema: z.object({}),
   execute: async () => {
+    "use step";
     try {
       const categories = await getCategories();
       return {
@@ -90,22 +90,12 @@ export const returnOrder = tool({
       .describe("Why the user is returning the order."),
   }),
   execute: async ({ orderId, reason }) => {
-    try {
-      const order = await getOrder(orderId);
-      await notifyReturnInProcess(orderId);
-      await preauthorizeRefund(orderId);
-      const filed = await createReturn({
-        orderId: order.id,
-        items: order.items.map((i) => ({
-          productId: i.productId,
-          quantity: i.quantity,
-        })),
-        reason,
-      });
-      return { returnId: filed.id, status: filed.status };
-    } catch (err) {
-      return { error: errorMessage(err) };
-    }
+    "use step";
+    const run = await start(returnFlow, [orderId, reason]);
+    return {
+      runId: run.runId,
+      message: `Return request received for order ${orderId}.`,
+    };
   },
 });
 
@@ -119,6 +109,7 @@ export const getProductDetails = tool({
       ),
   }),
   execute: async ({ idOrSlug }) => {
+    "use step";
     try {
       const productPromise = getProductById(idOrSlug);
       const stockPromise = getProductStock(idOrSlug).then(
